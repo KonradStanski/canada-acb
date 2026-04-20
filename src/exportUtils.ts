@@ -383,6 +383,7 @@ export function generateWsTamperScript(
   const TRANSACTIONS = ${JSON.stringify(data, null, 2)};
 
   let running = false;
+  let userClosed = false;
 
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -678,7 +679,9 @@ export function generateWsTamperScript(
       '  .panel { background:#1e293b; color:#e2e8f0; padding:16px; border-radius:8px 0 0 8px;',
       '    box-shadow:-4px 4px 16px rgba(0,0,0,0.4); font-size:13px; border:1px solid #334155; border-right:none; }',
       '  .title { font-weight:600; margin-bottom:4px; font-size:15px;',
-      '    display:flex; justify-content:space-between; align-items:center; }',
+      '    display:flex; justify-content:space-between; align-items:center;',
+      '    cursor:move; user-select:none; touch-action:none; }',
+      '  .title .collapse-btn { cursor:pointer; }',
       '  .subtitle { font-size:11px; color:#94a3b8; margin-bottom:10px; }',
       '  .status { margin-bottom:10px; padding:8px; border-radius:6px; background:#334155;',
       '    font-size:12px; min-height:20px; word-break:break-word; }',
@@ -793,16 +796,70 @@ export function generateWsTamperScript(
     });
 
     stopBtn.addEventListener('click', function() { running = false; });
-    shadow.getElementById('close-btn').addEventListener('click', function() { host.remove(); });
+    shadow.getElementById('close-btn').addEventListener('click', function() {
+      userClosed = true;
+      host.remove();
+    });
     collapseBtn.addEventListener('click', function() {
       collapsed = !collapsed;
       bodyEl.style.display = collapsed ? 'none' : 'block';
       collapseBtn.textContent = collapsed ? '+' : '\\u2212';
       host.style.width = collapsed ? '180px' : '300px';
     });
+
+    // ---- Drag support ----
+    var titleEl = shadow.querySelector('.title');
+    var dragging = false;
+    var dragDX = 0, dragDY = 0;
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    titleEl.addEventListener('pointerdown', function(e) {
+      if (e.target.closest('.collapse-btn')) return;
+      if (e.button !== 0) return;
+      var rect = host.getBoundingClientRect();
+      dragDX = e.clientX - rect.left;
+      dragDY = e.clientY - rect.top;
+      dragging = true;
+      try { titleEl.setPointerCapture(e.pointerId); } catch (_) {}
+      // Switch from right-anchored to left-anchored so left/top drive position
+      host.style.left = rect.left + 'px';
+      host.style.top = rect.top + 'px';
+      host.style.right = 'auto';
+      e.preventDefault();
+    });
+
+    titleEl.addEventListener('pointermove', function(e) {
+      if (!dragging) return;
+      var w = host.offsetWidth;
+      var h = host.offsetHeight;
+      host.style.left = clamp(e.clientX - dragDX, 0, window.innerWidth - w) + 'px';
+      host.style.top = clamp(e.clientY - dragDY, 0, window.innerHeight - h) + 'px';
+    });
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { titleEl.releasePointerCapture(e.pointerId); } catch (_) {}
+    }
+    titleEl.addEventListener('pointerup', endDrag);
+    titleEl.addEventListener('pointercancel', endDrag);
+
+    // Re-clamp on viewport resize; self-unregister if host is gone
+    window.addEventListener('resize', function onResize() {
+      if (!host.isConnected) { window.removeEventListener('resize', onResize); return; }
+      if (host.style.right !== 'auto') return; // hasn't been dragged yet
+      var rect = host.getBoundingClientRect();
+      var w = host.offsetWidth;
+      var h = host.offsetHeight;
+      host.style.left = clamp(rect.left, 0, window.innerWidth - w) + 'px';
+      host.style.top = clamp(rect.top, 0, window.innerHeight - h) + 'px';
+    });
   }
 
   function ensurePanel() {
+    if (userClosed) {
+      return;
+    }
     try {
       if (!document.getElementById(PANEL_ID)) {
         console.log('[${label} AutoFill] Panel missing, re-mounting...');
