@@ -78,6 +78,16 @@ const script = generateWsTamperScript(
 
 `generateTamperMonkeyScript(AcbEntry[], year)` is an ANET-specific convenience wrapper around `generateWsTamperScript` that maps `AcbEntry` fields, filters in only `sell` transactions and passes `label: 'ANET'`.
 
+### Demo script
+
+`scripts/demoTamperScript.mjs` invokes `generateWsTamperScript` with a couple of hard-coded dispositions and writes the resulting UserScript to stdout. It imports from `dist/`, so the package must be built first. Defaults to tax year 2025; pass `--2024` to generate the period-split variant.
+
+```bash
+npm run build
+npm run --silent demo:tamper > demo.user.js            # 2025 (no periods)
+npm run --silent demo:tamper -- --2024 > demo.user.js  # 2024 (Jun 24 split)
+```
+
 ## Development
 
 Install dependencies (includes dev tooling for build, typecheck, and tests):
