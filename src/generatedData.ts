@@ -45,7 +45,9 @@ export function buildNormalizedTransactions(
 
   for (const espp of transactions.esppPurchases) {
     const rate = exchangeRates[espp.purchaseDate] ?? null;
-    const totalUsd = espp.purchasePrice * espp.purchasedQty;
+    // Canadian ACB should use the purchase-date FMV. The discount between
+    // FMV and employee purchase price is employment income handled on payroll.
+    const totalUsd = espp.purchaseDateFmv * espp.purchasedQty;
 
     all.push({
       id: `espp-${espp.purchaseDate}-${espp.purchasedQty}`,
@@ -53,7 +55,7 @@ export function buildNormalizedTransactions(
       settlementDate: espp.purchaseDate,
       type: 'espp_purchase',
       quantity: espp.purchasedQty,
-      pricePerShareUsd: espp.purchasePrice,
+      pricePerShareUsd: espp.purchaseDateFmv,
       totalUsd,
       commissionUsd: 0,
       feeUsd: 0,

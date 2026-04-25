@@ -1,6 +1,6 @@
 {
   "name": "canada-acb",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Canadian ACB parsing and analysis utilities for ANET equity compensation PDFs",
   "type": "module",
   "main": "./dist/index.cjs",

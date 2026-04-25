@@ -1,4 +1,3 @@
-import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { generateWsTamperScript } from './exportUtils';
 import type { WsTaxEntry } from './types';
@@ -120,20 +119,20 @@ describe('generateWsTamperScript', () => {
       makeEntry({ settlementDate: '2024-11-20', description: 'plain' }),
     ];
 
-    // Parse-only: vm.Script compiles the source and throws on SyntaxError
+    // Parse-only: Function compiles the source and throws on SyntaxError
     // without running any of it, so references to browser globals
     // (document, window, unsafeWindow) don't need to exist.
     const script2024 = generateWsTamperScript(entries, 2024);
-    expect(() => new vm.Script(script2024)).not.toThrow();
+    expect(() => Function(script2024)).not.toThrow();
 
     const script2023 = generateWsTamperScript(
       [makeEntry({ settlementDate: '2023-05-15' })],
       2023,
     );
-    expect(() => new vm.Script(script2023)).not.toThrow();
+    expect(() => Function(script2023)).not.toThrow();
 
     const emptyScript = generateWsTamperScript([], 2023);
-    expect(() => new vm.Script(emptyScript)).not.toThrow();
+    expect(() => Function(emptyScript)).not.toThrow();
   });
 
   it("defaults typeKey to 'p' when the entry does not provide one", () => {

@@ -1,5 +1,5 @@
 import type { RawEsppPurchase, RawVestEvent } from './types';
-import { SPLIT_RATIO, isPreSplit } from './stockSplit';
+import { SPLIT_RATIO, isEsppAlreadySplitAdjusted, isPreSplit } from './stockSplit';
 import type { ExtractedPdfText } from './pdfText';
 
 type ParsedBenefitDocument =
@@ -58,7 +58,10 @@ function parseLooseNumber(value: string): number | null {
 }
 
 function normalizeBenefitPurchase(purchase: RawEsppPurchase): RawEsppPurchase {
-  if (!isPreSplit(purchase.purchaseDate)) {
+  if (
+    !isPreSplit(purchase.purchaseDate) ||
+    isEsppAlreadySplitAdjusted(purchase.purchaseDate, purchase.purchasePrice)
+  ) {
     return purchase;
   }
 
