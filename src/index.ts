@@ -11,6 +11,8 @@ export type {
   RawVestEvent,
   TaxYearSummary,
   TransactionType,
+  WsTaxEntry,
+  WsTamperScriptOptions,
 } from './types';
 
 export {
@@ -28,6 +30,7 @@ export {
   exportTaxYearsToCsv,
   generateAuditReport,
   generateTamperMonkeyScript,
+  generateWsTamperScript,
 } from './exportUtils';
 export { fetchExchangeRates } from './exchangeRates';
 export { parseBenefitHistoryPdf } from './benefitPdfParser';

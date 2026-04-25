@@ -1,4 +1,4 @@
-import type { AcbEntry, TaxYearSummary } from './types';
+import type { AcbEntry, TaxYearSummary, WsTaxEntry, WsTamperScriptOptions } from './types';
 
 function fmtNum(n: number | null): string {
   if (n === null) return '';
@@ -307,38 +307,66 @@ export function exportForAcbTool(entries: AcbEntry[]): string {
   return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
 }
 
-export function generateTamperMonkeyScript(entries: AcbEntry[], year: number): string {
-  const sells = entries.filter(
-    (e) => e.type === 'sell' && parseInt(e.date.substring(0, 4), 10) === year,
-  );
+function acbEntryToWsTaxEntry(e: AcbEntry): WsTaxEntry {
+  return {
+    typeKey: 'p',
+    description: `ANET ${e.settlementDate}`.substring(0, 30),
+    settlementDate: e.settlementDate,
+    proceeds: e.proceedsCad ?? 0,
+    costBase: e.acbOfSharesSoldCad ?? 0,
+    expenses: e.sellingExpensesCad,
+  };
+}
 
-  // For 2024 tax year, transactions are split into two periods:
-  // Period 1: Jan 1 - Jun 24 (fields use _temp suffix in table s3_t_temp)
-  // Period 2: Jun 25 - Dec 31 (fields use no suffix in table s3_t)
-  // All other years: single table s3_t, period is always 0 (no split)
+export function generateTamperMonkeyScript(entries: AcbEntry[], year: number): string {
+  const sells = entries.filter((e) => e.type === 'sell');
+  const wsEntries = sells.map(acbEntryToWsTaxEntry);
+  return generateWsTamperScript(
+    wsEntries, year,
+    { namespace: 'anet-acb', label: 'ANET', symbolName: 'ANET' });
+}
+
+/// For 2024 tax year, transactions are split into two periods:
+/// Period 1: Jan 1 - Jun 24 (fields use _temp suffix in table s3_t_temp)
+/// Period 2: Jun 25 - Dec 31 (fields use no suffix in table s3_t)
+/// All other years: single table s3_t, period is always 0 (no split)
+function derivePeriod(settlementDate: string, year: number): 0 | 1 | 2 {
+  if (year !== 2024) {
+    return 0;
+  }
+  const month = parseInt(settlementDate.substring(5, 7), 10);
+  const day = parseInt(settlementDate.substring(8, 10), 10);
+  return (month < 6 || (month === 6 && day <= 24)) ? 1 : 2;
+}
+
+export function generateWsTamperScript(
+  entries: WsTaxEntry[],
+  year: number,
+  options?: WsTamperScriptOptions,
+): string {
   const hasPeriods = year === 2024;
-  const data = sells.map((e) => {
-    let period = 0; // default: no period split
-    if (hasPeriods) {
-      const month = parseInt(e.date.substring(5, 7), 10);
-      const day = parseInt(e.date.substring(8, 10), 10);
-      period = (month < 6 || (month === 6 && day <= 24)) ? 1 : 2;
-    }
-    return {
-      typeKey: 'p',
-      description: `ANET ${e.date}`.substring(0, 30),
-      proceeds: (e.proceedsCad ?? 0).toFixed(2),
-      costBase: (e.acbOfSharesSoldCad ?? 0).toFixed(2),
-      expenses: e.sellingExpensesCad.toFixed(2),
-      period,
-    };
-  });
+  const dp = options?.decimalPlaces ?? 2;
+  const label = options?.label ?? 'ACB';
+  const symbolDesc = options?.symbolName ? ` ${options.symbolName}` : '';
+  const namespace = options?.namespace ?? 'canada-acb';
+
+  const yearStr = String(year);
+  const inYear = entries.filter((e) => e.settlementDate.startsWith(yearStr + '-'));
+
+  const data = inYear.map((e) => ({
+    typeKey: e.typeKey ?? 'p',
+    description: e.description,
+    proceeds: e.proceeds.toFixed(dp),
+    costBase: e.costBase.toFixed(dp),
+    expenses: e.expenses.toFixed(dp),
+    period: derivePeriod(e.settlementDate, year),
+  }));
 
   return `// ==UserScript==
-// @name         WealthSimple Tax Capital Gains Auto-Fill (ANET ${year})
-// @namespace    anet-acb
+// @name         WealthSimple Tax Capital Gains Auto-Fill (${label} ${year})
+// @namespace    ${namespace}
 // @version      2.0
-// @description  Auto-fill capital gains from ANET dispositions for tax year ${year}
+// @description  Auto-fill capital gains from${symbolDesc} dispositions for tax year ${year}
 // @match        https://my.wealthsimple.com/*
 // @match        https://app.wealthsimple.com/*
 // @grant        unsafeWindow
@@ -349,8 +377,8 @@ export function generateTamperMonkeyScript(entries: AcbEntry[], year: number): s
 (function() {
   'use strict';
 
-  console.log('%c[ANET AutoFill] Script loaded successfully!', 'color: lime; font-size: 16px; font-weight: bold;');
-  console.log('[ANET AutoFill] Transactions:', ${sells.length});
+  console.log('%c[${label} AutoFill] Script loaded successfully!', 'color: lime; font-size: 16px; font-weight: bold;');
+  console.log('[${label} AutoFill] Transactions:', ${data.length});
 
   const TRANSACTIONS = ${JSON.stringify(data, null, 2)};
 
@@ -437,8 +465,8 @@ export function generateTamperMonkeyScript(entries: AcbEntry[], year: number): s
 
   function log(msg) {
     var ae = document.activeElement;
-    console.log('[ANET AutoFill] ' + msg);
-    console.log('[ANET AutoFill]   activeElement:', ae?.tagName, 'type=' + ae?.type, 'name=' + ae?.name, 'id=' + ae?.id, 'class=' + ae?.className);
+    console.log('[${label} AutoFill] ' + msg);
+    console.log('[${label} AutoFill]   activeElement:', ae?.tagName, 'type=' + ae?.type, 'name=' + ae?.name, 'id=' + ae?.id, 'class=' + ae?.className);
   }
 
   function getTableTarget(periodNum) {
@@ -630,11 +658,11 @@ export function generateTamperMonkeyScript(entries: AcbEntry[], year: number): s
       rows + '</table></div>';
   }
 
-  var PANEL_ID = 'anet-acb-autofill-host';
+  var PANEL_ID = 'canada-acb-autofill-host';
 
   function createPanel() {
     if (document.getElementById(PANEL_ID)) return;
-    console.log('%c[ANET AutoFill] Mounting panel...', 'color: cyan; font-weight: bold;');
+    console.log('%c[${label} AutoFill] Mounting panel...', 'color: cyan; font-weight: bold;');
 
     var host = document.createElement('div');
     host.id = PANEL_ID;
@@ -679,7 +707,7 @@ export function generateTamperMonkeyScript(entries: AcbEntry[], year: number): s
       '</style>',
       '<div class="panel">',
       '  <div class="title">',
-      '    <span>ANET Auto-Fill (${year})</span>',
+      '    <span>${label} Auto-Fill (${year})</span>',
       '    <button class="collapse-btn" id="collapse-btn">\\u2212</button>',
       '  </div>',
       '  <div class="subtitle">' + TRANSACTIONS.length + ' total dispositions</div>',
@@ -777,12 +805,12 @@ export function generateTamperMonkeyScript(entries: AcbEntry[], year: number): s
   function ensurePanel() {
     try {
       if (!document.getElementById(PANEL_ID)) {
-        console.log('[ANET AutoFill] Panel missing, re-mounting...');
+        console.log('[${label} AutoFill] Panel missing, re-mounting...');
         createPanel();
-        console.log('%c[ANET AutoFill] Panel mounted OK', 'color: lime;');
+        console.log('%c[${label} AutoFill] Panel mounted OK', 'color: lime;');
       }
     } catch (e) {
-      console.error('[ANET AutoFill] Panel mount FAILED:', e);
+      console.error('[${label} AutoFill] Panel mount FAILED:', e);
     }
   }
 
@@ -790,7 +818,7 @@ export function generateTamperMonkeyScript(entries: AcbEntry[], year: number): s
   var observer = new MutationObserver(ensurePanel);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   setInterval(ensurePanel, 2000);
-  console.log('[ANET AutoFill] Observer and interval started');
+  console.log('[${label} AutoFill] Observer and interval started');
 })();
 `;
 }

@@ -45,7 +45,9 @@ export interface RawTransactionSet {
 
 export interface NormalizedTransaction {
   id: string;
+  /** YYYY-MM-DD */
   date: string;
+  /** YYYY-MM-DD */
   settlementDate: string;
   type: TransactionType;
   quantity: number;
@@ -64,7 +66,9 @@ export interface NormalizedTransaction {
 
 export interface AcbEntry {
   id: string;
+  /** YYYY-MM-DD */
   date: string;
+  /** YYYY-MM-DD */
   settlementDate: string;
   type: TransactionType;
   description: string;
@@ -121,4 +125,33 @@ export interface GeneratedAcbData {
   taxYearSummaries: TaxYearSummary[];
   years: number[];
   allDates: string[];
+}
+
+export interface WsTaxEntry {
+  /** WS form section key. Defaults to 'p' (publicly traded shares). */
+  typeKey?: string;
+  /** Free-text description rendered into WS Tax. Note: WS truncates this
+   *  field at 30 chars in the form — callers may want to pre-truncate to
+   *  avoid surprises. */
+  description: string;
+  /** Settlement date in YYYY-MM-DD format. Used by the helper to derive
+   *  the 2024 CRA reporting-period split when applicable. */
+  settlementDate: string;
+  proceeds: number;
+  costBase: number;
+  expenses: number;
+}
+
+export interface WsTamperScriptOptions {
+  /** The @namespace for the script. Defaults to "canada-acb".
+   *  A unique identifier, domain or URL */
+  namespace?: string;
+  /** Brand/label substituted into the panel title, log prefix, and script
+   *  @name. Defaults to "ACB". */
+  label?: string;
+  /** Used in the script description. Provide if all transactions are for the same symbol. */
+  symbolName?: string;
+  /** Number of decimal places used when serializing proceeds/cost/expenses
+   *  into the script body. Defaults to 2. */
+  decimalPlaces?: number;
 }
