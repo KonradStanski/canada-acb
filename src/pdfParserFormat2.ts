@@ -12,42 +12,45 @@ import type { RawSellTransaction } from './types';
  * may have a space between $ and the number: "$ 2,394.83"
  */
 export function parseFormat2(text: string, filename: string): RawSellTransaction | null {
-  const dataMatch = text.match(
-    /(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+[\s\S]*?ANET\s+SELL\s+(\d+)\s+\$\s*([\d,.]+)/
+  return parseFormat2All(text, filename)[0] ?? null;
+}
+
+export function parseFormat2All(text: string, filename: string): RawSellTransaction[] {
+  const dataMatches = Array.from(
+    text.matchAll(
+      /(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+[\s\S]*?ANET\s+SELL\s+(\d+)\s+\$\s*([\d,.]+)/g,
+    ),
   );
-  if (!dataMatch) return null;
+  if (dataMatches.length === 0) return [];
 
-  const [, tradeDateRaw, settlementDateRaw, qtyStr, priceStr] = dataMatch;
+  const principals = parseAmounts(text, /PRINCIPAL\s+\$\s*([\d,]+\.?\d*)/g);
+  const commissions = parseAmounts(text, /COMMISSION\s+\$\s*([\d,]+\.?\d*)/g);
+  const fees = parseAmounts(text, /(?<!Transaction\s)FEE\s+\$\s*([\d,]+\.?\d*)/g);
+  const netAmounts = parseAmounts(text, /NET AMOUNT\s+\$\s*([\d,]+\.?\d*)/g);
 
-  const tradeDate = parseMMDDYY(tradeDateRaw);
-  const settlementDate = parseMMDDYY(settlementDateRaw);
-  const quantity = parseInt(qtyStr, 10);
-  const price = parseFloat(priceStr.replace(/,/g, ''));
+  return dataMatches.map((dataMatch, index) => {
+    const [, tradeDateRaw, settlementDateRaw, qtyStr, priceStr] = dataMatch;
+    const tradeDate = parseMMDDYY(tradeDateRaw);
+    const settlementDate = parseMMDDYY(settlementDateRaw);
+    const quantity = parseInt(qtyStr, 10);
+    const price = parseFloat(priceStr.replace(/,/g, ''));
+    const principal = principals[index] ?? quantity * price;
+    const commission = commissions[index] ?? 0;
+    const fee = fees[index] ?? 0;
 
-  const principalMatch = text.match(/PRINCIPAL\s+\$\s*([\d,]+\.?\d*)/);
-  const principal = principalMatch ? parseAmount(principalMatch[1]) : quantity * price;
-
-  const commissionMatch = text.match(/COMMISSION\s+\$\s*([\d,]+\.?\d*)/);
-  const commission = commissionMatch ? parseAmount(commissionMatch[1]) : 0;
-
-  const feeMatch = text.match(/(?<!Transaction\s)FEE\s+\$\s*([\d,]+\.?\d*)/);
-  const fee = feeMatch ? parseAmount(feeMatch[1]) : 0;
-
-  const netMatch = text.match(/NET AMOUNT\s+\$\s*([\d,]+\.?\d*)/);
-  const netAmount = netMatch ? parseAmount(netMatch[1]) : principal - commission - fee;
-
-  return {
-    tradeDate,
-    settlementDate,
-    quantity,
-    price,
-    principal,
-    commission,
-    fee,
-    netAmount,
-    transactionType: 'Sold',
-    source: filename,
-  };
+    return {
+      tradeDate,
+      settlementDate,
+      quantity,
+      price,
+      principal,
+      commission,
+      fee,
+      netAmount: netAmounts[index] ?? principal - commission - fee,
+      transactionType: 'Sold',
+      source: filename,
+    };
+  });
 }
 
 function parseMMDDYY(date: string): string {
@@ -59,4 +62,8 @@ function parseMMDDYY(date: string): string {
 
 function parseAmount(s: string): number {
   return parseFloat(s.replace(/,/g, ''));
+}
+
+function parseAmounts(text: string, regex: RegExp): number[] {
+  return Array.from(text.matchAll(regex), (match) => parseAmount(match[1]));
 }

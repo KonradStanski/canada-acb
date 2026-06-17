@@ -43,6 +43,12 @@ export interface RawTransactionSet {
   esppPurchases: RawEsppPurchase[];
 }
 
+export interface ParsedPdfDuplicate {
+  kind: TransactionType;
+  source: string;
+  duplicateOf: string;
+}
+
 export interface NormalizedTransaction {
   id: string;
   /** YYYY-MM-DD */
@@ -117,6 +123,7 @@ export interface ExchangeRateCache {
 
 export interface ParsedPdfResult extends RawTransactionSet {
   errors: string[];
+  duplicates: ParsedPdfDuplicate[];
 }
 
 export interface GeneratedAcbData {

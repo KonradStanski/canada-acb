@@ -42,11 +42,15 @@ const data = generateAcbData(parsed, exchangeRates);
 const csv = exportAcbToCsv(data.acbEntries);
 ```
 
+`parsePdfs` parses every sale line item in a trade confirmation and ignores
+duplicate parsed transactions so regenerated or re-uploaded PDFs do not
+double-count. Skipped duplicates are reported in `parsed.duplicates`.
+
 ## API
 
 Root exports include:
 
-- PDF parsing helpers: `parsePdf`, `parsePdfs`, `extractPdfText`
+- PDF parsing helpers: `parsePdf`, `parsePdfDocuments`, `parsePdfs`, `extractPdfText`
 - Core data pipeline: `buildNormalizedTransactions`, `collectTransactionDates`, `generateAcbData`
 - Analysis: `calculateAcb`, `summarizeByTaxYear`
 - Exchange rates: `fetchExchangeRates`

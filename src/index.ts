@@ -3,6 +3,7 @@ export type {
   ExchangeRateCache,
   GeneratedAcbData,
   NormalizedTransaction,
+  ParsedPdfDuplicate,
   ParsedPdfResult,
   PricePoint,
   RawEsppPurchase,
@@ -35,11 +36,13 @@ export {
 export { fetchExchangeRates } from './exchangeRates';
 export { parseBenefitHistoryPdf } from './benefitPdfParser';
 export {
+  type ParsedPdfDocument,
   parsePdf,
+  parsePdfDocuments,
   parsePdfs,
 } from './pdfParser';
-export { parseFormat1 } from './pdfParserFormat1';
-export { parseFormat2 } from './pdfParserFormat2';
+export { parseFormat1, parseFormat1All } from './pdfParserFormat1';
+export { parseFormat2, parseFormat2All } from './pdfParserFormat2';
 export {
   extractPdfText,
   type ExtractedPdfText,
