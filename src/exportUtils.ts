@@ -383,6 +383,7 @@ export function generateWsTamperScript(
   const TRANSACTIONS = ${JSON.stringify(data, null, 2)};
 
   let running = false;
+  let userClosed = false;
 
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -474,10 +475,23 @@ export function generateWsTamperScript(
     return periodNum === 1 ? 's3_t_temp' : 's3_t';
   }
 
-  // Find the first empty Type <select> in the period's table
-  function findFirstEmptyType(periodNum) {
-    var target = getTableTarget(periodNum);
-    var table = document.querySelector('table[data-son-sub-input="' + target + '"]');
+  // Find the Capital Gains table for a target, scoped to the section
+  // containing the last focused element (so multiple CG sections are disambiguated).
+  function findTargetTable(target) {
+    if (lastMainFocus && lastMainFocus.isConnected) {
+      var el = lastMainFocus.parentElement;
+      while (el) {
+        var scoped = el.querySelector('table[data-son-sub-input="' + target + '"]');
+        if (scoped) return { table: scoped, scoped: true };
+        el = el.parentElement;
+      }
+    }
+    var fallback = document.querySelector('table[data-son-sub-input="' + target + '"]');
+    return { table: fallback, scoped: false };
+  }
+
+  // Find the first empty Type <select> in the given table
+  function findFirstEmptyType(table, target) {
     if (!table) { log('Table not found for target: ' + target); return null; }
     var rows = table.querySelectorAll('tbody > tr[data-son-form]');
     log('Found ' + rows.length + ' rows in ' + target);
@@ -492,11 +506,15 @@ export function generateWsTamperScript(
     return null;
   }
 
-  // Click "Add another disposition" for the period
-  function clickAddButton(periodNum) {
-    var target = getTableTarget(periodNum);
-    var btn = document.querySelector('button.js-add-sub-input[data-son-sub-input-target="' + target + '"]');
-    if (btn) { btn.click(); log('Clicked Add button for ' + target); return true; }
+  // Click "Add another disposition" for the given table.
+  // Matches the add button to the table by DOM order, since multiple CG
+  // sections have identical data attributes on both tables and buttons.
+  function clickAddButton(table, target) {
+    var allTables = Array.from(document.querySelectorAll('table[data-son-sub-input="' + target + '"]'));
+    var allBtns = Array.from(document.querySelectorAll('button.js-add-sub-input[data-son-sub-input-target="' + target + '"]'));
+    var idx = allTables.indexOf(table);
+    var btn = (idx >= 0 && idx < allBtns.length) ? allBtns[idx] : allBtns[0];
+    if (btn) { btn.click(); log('Clicked Add button for ' + target + ' (section idx=' + idx + ')'); return true; }
     log('Add button not found for ' + target);
     return false;
   }
@@ -513,6 +531,20 @@ export function generateWsTamperScript(
       return;
     }
 
+    var target = getTableTarget(periodNum);
+    var resolved = findTargetTable(target);
+    var table = resolved.table;
+    if (!table) {
+      log('ERROR: No table on page for target ' + target);
+      statusEl.textContent = 'Error: no ' + target + ' table on page';
+      statusEl.style.background = '#dc2626';
+      running = false;
+      return;
+    }
+    if (!resolved.scoped) {
+      log('WARN: no focused Capital Gains section — using first matching table');
+    }
+
     log('=== Starting ' + label + ' fill: ' + txns.length + ' transactions ===');
 
     var filled = 0;
@@ -523,12 +555,12 @@ export function generateWsTamperScript(
       statusEl.textContent = label + ': ' + (i + 1) + '/' + txns.length + ' — ' + tx.description;
 
       // Find or create an empty row, then focus its Type select
-      var typeSelect = findFirstEmptyType(periodNum);
+      var typeSelect = findFirstEmptyType(table, target);
       if (!typeSelect) {
         log('No empty row — clicking Add');
-        clickAddButton(periodNum);
+        clickAddButton(table, target);
         await sleep(STEP_DELAY);
-        typeSelect = findFirstEmptyType(periodNum);
+        typeSelect = findFirstEmptyType(table, target);
       }
       if (!typeSelect) {
         log('ERROR: Still no empty row after clicking Add');
@@ -660,6 +692,16 @@ export function generateWsTamperScript(
 
   var PANEL_ID = 'canada-acb-autofill-host';
 
+  // Track the last focused element outside the panel so we can identify which
+  // Capital Gains section the user wants to fill. Clicks into the shadow DOM
+  // panel retarget focusin to the host, which we ignore.
+  var lastMainFocus = null;
+  document.addEventListener('focusin', function(e) {
+    var t = e.target;
+    if (!t || t.id === PANEL_ID) return;
+    lastMainFocus = t;
+  });
+
   function createPanel() {
     if (document.getElementById(PANEL_ID)) return;
     console.log('%c[${label} AutoFill] Mounting panel...', 'color: cyan; font-weight: bold;');
@@ -678,7 +720,9 @@ export function generateWsTamperScript(
       '  .panel { background:#1e293b; color:#e2e8f0; padding:16px; border-radius:8px 0 0 8px;',
       '    box-shadow:-4px 4px 16px rgba(0,0,0,0.4); font-size:13px; border:1px solid #334155; border-right:none; }',
       '  .title { font-weight:600; margin-bottom:4px; font-size:15px;',
-      '    display:flex; justify-content:space-between; align-items:center; }',
+      '    display:flex; justify-content:space-between; align-items:center;',
+      '    cursor:move; user-select:none; touch-action:none; }',
+      '  .title .collapse-btn { cursor:pointer; }',
       '  .subtitle { font-size:11px; color:#94a3b8; margin-bottom:10px; }',
       '  .status { margin-bottom:10px; padding:8px; border-radius:6px; background:#334155;',
       '    font-size:12px; min-height:20px; word-break:break-word; }',
@@ -793,16 +837,70 @@ export function generateWsTamperScript(
     });
 
     stopBtn.addEventListener('click', function() { running = false; });
-    shadow.getElementById('close-btn').addEventListener('click', function() { host.remove(); });
+    shadow.getElementById('close-btn').addEventListener('click', function() {
+      userClosed = true;
+      host.remove();
+    });
     collapseBtn.addEventListener('click', function() {
       collapsed = !collapsed;
       bodyEl.style.display = collapsed ? 'none' : 'block';
       collapseBtn.textContent = collapsed ? '+' : '\\u2212';
       host.style.width = collapsed ? '180px' : '300px';
     });
+
+    // ---- Drag support ----
+    var titleEl = shadow.querySelector('.title');
+    var dragging = false;
+    var dragDX = 0, dragDY = 0;
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    titleEl.addEventListener('pointerdown', function(e) {
+      if (e.target.closest('.collapse-btn')) return;
+      if (e.button !== 0) return;
+      var rect = host.getBoundingClientRect();
+      dragDX = e.clientX - rect.left;
+      dragDY = e.clientY - rect.top;
+      dragging = true;
+      try { titleEl.setPointerCapture(e.pointerId); } catch (_) {}
+      // Switch from right-anchored to left-anchored so left/top drive position
+      host.style.left = rect.left + 'px';
+      host.style.top = rect.top + 'px';
+      host.style.right = 'auto';
+      e.preventDefault();
+    });
+
+    titleEl.addEventListener('pointermove', function(e) {
+      if (!dragging) return;
+      var w = host.offsetWidth;
+      var h = host.offsetHeight;
+      host.style.left = clamp(e.clientX - dragDX, 0, window.innerWidth - w) + 'px';
+      host.style.top = clamp(e.clientY - dragDY, 0, window.innerHeight - h) + 'px';
+    });
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { titleEl.releasePointerCapture(e.pointerId); } catch (_) {}
+    }
+    titleEl.addEventListener('pointerup', endDrag);
+    titleEl.addEventListener('pointercancel', endDrag);
+
+    // Re-clamp on viewport resize; self-unregister if host is gone
+    window.addEventListener('resize', function onResize() {
+      if (!host.isConnected) { window.removeEventListener('resize', onResize); return; }
+      if (host.style.right !== 'auto') return; // hasn't been dragged yet
+      var rect = host.getBoundingClientRect();
+      var w = host.offsetWidth;
+      var h = host.offsetHeight;
+      host.style.left = clamp(rect.left, 0, window.innerWidth - w) + 'px';
+      host.style.top = clamp(rect.top, 0, window.innerHeight - h) + 'px';
+    });
   }
 
   function ensurePanel() {
+    if (userClosed) {
+      return;
+    }
     try {
       if (!document.getElementById(PANEL_ID)) {
         console.log('[${label} AutoFill] Panel missing, re-mounting...');

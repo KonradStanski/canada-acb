@@ -24,6 +24,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "demo:tamper": "node scripts/demoTamperScript.mjs",
     "prepare": "npm run build"
   },
   "keywords": [
