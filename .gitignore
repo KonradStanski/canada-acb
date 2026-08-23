@@ -2,5 +2,9 @@ dist
 node_modules
 *.tgz
 
+# Do not pin version exactly. User is responsible
+# for installing a compatible version.
+.nvmrc
+
 # Agent files
 .claude/
