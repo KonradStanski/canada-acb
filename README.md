@@ -84,6 +84,16 @@ const script = generateWsTamperScript(
 
 ## Development
 
+Development requires Node 22.13.0 or newer (a requirement of pdfjs-dist@^6).
+Add a local `.nvmrc` to the project directory to select a compatible version
+for `nvm` or `fnm`.
+
+eg.
+```bash
+echo "lts/*" > .nvmrc
+fnm use
+```
+
 Install dependencies (includes dev tooling for build, typecheck, and tests):
 
 ```bash
@@ -98,8 +108,6 @@ Unit tests use [Vitest](https://vitest.dev/). Test files live alongside sources 
 npm test           # run the suite once
 npm run test:watch # re-run on file changes
 ```
-
-Node 18+ is supported by the pinned `vitest@^2` (newer majors require Node 20+).
 
 ### Typecheck and build
 

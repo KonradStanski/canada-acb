@@ -18,6 +18,9 @@
     "dist",
     "README.md"
   ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "sideEffects": false,
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
@@ -35,11 +38,11 @@
     "anet"
   ],
   "dependencies": {
-    "pdfjs-dist": "^5.5.207"
+    "pdfjs-dist": "^6.2.108"
   },
   "devDependencies": {
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.11"
   }
 }
